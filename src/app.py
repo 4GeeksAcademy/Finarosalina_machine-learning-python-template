@@ -39,8 +39,6 @@ df=df.drop_duplicates()
 duplicados = df.duplicated()
 print(f"Total de filas duplicadas: {duplicados.sum()}")
 
-df.info()
-
 fig, axis = plt.subplots(4, 3, figsize=(12, 10))
 
 # Crear un histograma múltiple
@@ -294,13 +292,8 @@ df_reducido.columns
 
 from sklearn.model_selection import train_test_split
 
-num_variables = ['duration', 'campaign', 'pdays', 'previous', 'emp.var.rate',
-       'cons.price.idx', 'euribor3m', 'nr.employed', 'poutcome_n',
-       'contact_n', 'month_n', 'loan_n', 'default_n']
-
-# Dividimos el conjunto de datos en muestras de train y test
-X = df_reducido.drop('y', axis = 1)[num_variables]
-y = df_reducido['y']
+X = df_reducido.drop('y', axis=1)  
+y = df_reducido['y'] 
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 42)
 
@@ -316,50 +309,61 @@ variables_a_escalar = [col for col in X_train.columns if col not in no_escalar]
 
 # Escalar
 scaler = MinMaxScaler()
-X_train_escalado = pd.DataFrame(
-    scaler.fit_transform(X_train[variables_a_escalar]),
-    index=X_train.index,
-    columns=variables_a_escalar
-)
 
-X_test_escalado = pd.DataFrame(
-    scaler.transform(X_test[variables_a_escalar]),
-    index=X_test.index,
-    columns=variables_a_escalar
-)
+# Escalar solo las columnas necesarias
+X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train[variables_a_escalar]), columns=variables_a_escalar, index=X_train.index)
+X_test_scaled = pd.DataFrame(scaler.transform(X_test[variables_a_escalar]), columns=variables_a_escalar, index=X_test.index)
 
-# Concatenar las no escaladas al final
-X_train_final = pd.concat([X_train_escalado, X_train[no_escalar]], axis=1)
-X_test_final = pd.concat([X_test_escalado, X_test[no_escalar]], axis=1)
+
+X_train_final = pd.concat([X_train_scaled, X_train[no_escalar]], axis=1)
+X_test_final = pd.concat([X_test_scaled, X_test[no_escalar]], axis=1)
 
 X_train_final.head()
 
 
 from sklearn.feature_selection import f_classif, SelectKBest
 
-# Con un valor de k = 5 decimos implícitamente que queremos eliminar 2 características del conjunto de datos
-selection_model = SelectKBest(f_classif, k = 11)
-selection_model.fit(X_train, y_train)
-ix = selection_model.get_support()
-X_train_sel = pd.DataFrame(selection_model.transform(X_train), columns = X_train.columns.values[ix])
-X_test_sel = pd.DataFrame(selection_model.transform(X_test), columns = X_test.columns.values[ix])
 
+selection_model = SelectKBest(f_classif, k = 11)
+selection_model.fit(X_train_final, y_train)
+
+ix = selection_model.get_support()
+
+X_train_sel = pd.DataFrame(selection_model.transform(X_train_final), columns = X_train_final.columns[ix])
+X_test_sel = pd.DataFrame(selection_model.transform(X_test_final), columns = X_test_final.columns[ix])
+
+# Ver los primeros 5 registros del conjunto seleccionado de X_train
 X_train_sel.head()
 
-X_train_sel.to_csv("/workspaces/Finarosalina_machine-learning-python-template/data/processed.csv", index=False)
-X_test_sel.to_csv("/workspaces/Finarosalina_machine-learning-python-template/data/processed.csv", index=False)
+
+# Guardar X_train_sel y y_train en un archivo CSV
+train_data = X_train_sel.copy()
+train_data['y'] = y_train  # Añadimos las etiquetas de destino
+
+# Guardar X_test_sel y y_test en un archivo CSV
+test_data = X_test_sel.copy()
+test_data['y'] = y_test  # Añadimos las etiquetas de destino
+
+# Guardar los DataFrames en archivos CSV
+train_data.to_csv("/workspaces/Finarosalina_machine-learning-python-template/data/processed/processed_train.csv", index=False)
+test_data.to_csv("/workspaces/Finarosalina_machine-learning-python-template/data/processed/processed_test.csv", index=False)
+
 
 from sklearn.linear_model import LogisticRegression
 
 model = LogisticRegression()
-model.fit(X_train, y_train)
+model.fit(X_train_sel, y_train)
+# Realizar predicciones
+y_pred = model.predict(X_test_sel)
 
-y_pred = model.predict(X_test)
-y_pred
+# Evaluar el modelo
+from sklearn.metrics import accuracy_score, confusion_matrix
 
-from sklearn.metrics import accuracy_score
+# Calcular la precisión del modelo
+accuracy = accuracy_score(y_test, y_pred)
 
-accuracy_score(y_test, y_pred)
+print(f"Precisión: {accuracy}")
+
 
 from sklearn.metrics import confusion_matrix
 
@@ -381,8 +385,9 @@ plt.tight_layout()
 plt.show()
 
 
-coeficientes = pd.Series(model.coef_[0], index=X_train.columns)
+coeficientes = pd.Series(model.coef_[0], index=X_train_sel.columns)
 print(coeficientes.sort_values(ascending=False))
+
 
 
 coef_df = coeficientes.sort_values().plot(kind='barh', figsize=(8, 6), color='teal')
@@ -398,10 +403,10 @@ plt.show()
 model = LogisticRegression(max_iter=1000, random_state=42)
 
 # Entrenar el modelo
-model.fit(X_train, y_train)
+model.fit(X_train_sel, y_train)
 
 # Predecir con los datos de prueba
-y_pred = model.predict(X_test)
+y_pred = model.predict(X_test_sel)
 
 # Calcular accuracy
 base_accuracy = accuracy_score(y_test, y_pred)
